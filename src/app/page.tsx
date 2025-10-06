@@ -216,9 +216,9 @@ export default function HomePage() {
 
     // Single polling interval for all active jobs
     React.useEffect(() => {
-        // Get non-temp active jobs
+        // Get non-temp active jobs that are still processing
         const realJobs = Array.from(activeJobs.entries()).filter(
-            ([id]) => !id.startsWith('temp_')
+            ([id, job]) => !id.startsWith('temp_') && job.status !== 'completed' && job.status !== 'failed'
         );
 
         const hasActiveJobs = realJobs.length > 0;
@@ -239,9 +239,9 @@ export default function HomePage() {
 
             // Define the polling function
             const pollAllJobs = async () => {
-                // Get current real jobs from ref (always latest)
+                // Get current real jobs from ref (always latest) that are still processing
                 const currentRealJobs = Array.from(activeJobsRef.current.entries()).filter(
-                    ([id]) => !id.startsWith('temp_')
+                    ([id, job]) => !id.startsWith('temp_') && job.status !== 'completed' && job.status !== 'failed'
                 );
 
                 if (currentRealJobs.length === 0) {
