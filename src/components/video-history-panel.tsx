@@ -130,9 +130,8 @@ export function VideoHistoryPanel({
                                     <p>Pricing for Sora 2:</p>
                                     <ul className='list-disc pl-4'>
                                         <li>sora-2 (720p): $0.10/sec</li>
-                                        <li>sora-2 (1080p+): $0.30/sec</li>
                                         <li>sora-2-pro (720p): $0.30/sec</li>
-                                        <li>sora-2-pro (1080p+): $0.50/sec</li>
+                                        <li>sora-2-pro (1080p): $0.50/sec</li>
                                     </ul>
                                 </div>
                                 <div className='space-y-2 py-4 text-sm text-neutral-300'>
