@@ -53,6 +53,12 @@ export default function HomePage() {
         activeJobsRef.current = activeJobs;
     }, [activeJobs]);
 
+    // Memoize a stable key for active job IDs to trigger polling effect
+    const activeJobIdsKey = React.useMemo(() => {
+        const ids = Array.from(activeJobs.keys()).filter(id => !id.startsWith('temp_'));
+        return ids.join('|');
+    }, [activeJobs]);
+
     // Helper to save active job IDs to localStorage
     const saveActiveJobIds = React.useCallback((jobs: Map<string, VideoJob>) => {
         const activeIds = Array.from(jobs.keys()).filter(id => !id.startsWith('temp_'));
@@ -360,7 +366,7 @@ export default function HomePage() {
         // Note: Only clear if we're about to create a new one or unmounting
         return undefined;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeJobs.size, clientPasswordHash]);
+    }, [activeJobIdsKey, clientPasswordHash]);
 
     // Resume active jobs on initial load
     React.useEffect(() => {
