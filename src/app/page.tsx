@@ -445,6 +445,8 @@ export default function HomePage() {
                 if (thumbnailResponse.ok) {
                     thumbnailBlob = await thumbnailResponse.blob();
                     console.log(`Downloaded thumbnail for video ${job.id}`);
+                } else if (thumbnailResponse.status === 404) {
+                    console.warn(`Thumbnail not available yet for ${job.id}, skipping`);
                 }
             } catch (err) {
                 console.error(`Error downloading thumbnail for ${job.id}:`, err);
@@ -465,6 +467,8 @@ export default function HomePage() {
                     console.log(`Downloaded spritesheet for video ${job.id}`);
                     // Spritesheet is saved to filesystem by the API endpoint
                     // We're not storing it in IndexedDB for now since it's mainly for future features
+                } else if (spritesheetResponse.status === 404) {
+                    console.warn(`Spritesheet not available yet for ${job.id}, skipping`);
                 }
             } catch (err) {
                 console.error(`Error downloading spritesheet for ${job.id}:`, err);
