@@ -74,12 +74,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             }
         }
 
-        console.log(`Downloading ${variant} content for video: ${id}`);
-
-        // Download content from OpenAI
-        const content = await openai.videos.downloadContent(id, { variant });
-        const buffer = Buffer.from(await content.arrayBuffer());
-
         // Determine file extension and content type
         let fileExtension: string;
         let contentType: string;
@@ -96,17 +90,39 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             contentType = 'image/jpeg';
         }
 
-        // Save to filesystem if in fs mode
+        let buffer: Buffer;
+
+        // Check if file exists on filesystem first (fs mode only)
         if (effectiveStorageMode === 'fs') {
             await ensureOutputDirExists();
             const filename = `${id}_${variant}.${fileExtension}`;
             const filepath = path.join(outputDir, filename);
-            await fs.writeFile(filepath, buffer);
-            console.log(`Saved ${variant} to: ${filepath}`);
+
+            try {
+                // Try to read from filesystem first
+                buffer = await fs.readFile(filepath);
+                console.log(`Serving ${variant} from filesystem: ${filepath}`);
+            } catch (error: unknown) {
+                // File doesn't exist, download from OpenAI
+                if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+                    console.log(`File not found, downloading ${variant} content for video: ${id}`);
+                    const content = await openai.videos.downloadContent(id, { variant });
+                    buffer = Buffer.from(await content.arrayBuffer());
+                    await fs.writeFile(filepath, buffer);
+                    console.log(`Saved ${variant} to: ${filepath}`);
+                } else {
+                    throw error;
+                }
+            }
+        } else {
+            // IndexedDB mode: download from OpenAI (client checks IndexedDB before calling this API)
+            console.log(`Downloading ${variant} content for video: ${id}`);
+            const content = await openai.videos.downloadContent(id, { variant });
+            buffer = Buffer.from(await content.arrayBuffer());
         }
 
-        // Return the binary content
-        return new NextResponse(buffer, {
+        // Return the binary content (convert Buffer to Uint8Array for NextResponse)
+        return new NextResponse(new Uint8Array(buffer), {
             headers: {
                 'Content-Type': contentType,
                 'Content-Disposition': `inline; filename="${id}_${variant}.${fileExtension}"`,
