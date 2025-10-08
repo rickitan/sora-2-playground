@@ -6,6 +6,9 @@ import { VideoHistoryPanel } from '@/components/video-history-panel';
 import { VideoOutput } from '@/components/video-output';
 import { PasswordDialog } from '@/components/password-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
 import { calculateVideoCost } from '@/lib/cost-utils';
 import { db, type VideoRecord } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -39,6 +42,8 @@ export default function HomePage() {
     const [error, setError] = React.useState<string | null>(null);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordDialogContext, setPasswordDialogContext] = React.useState<'initial' | 'retry'>('initial');
+    const [forceDeleteDialogOpen, setForceDeleteDialogOpen] = React.useState(false);
+    const [itemToForceDelete, setItemToForceDelete] = React.useState<VideoMetadata | null>(null);
 
     // Job tracking
     const [activeJobs, setActiveJobs] = React.useState<Map<string, VideoJob>>(new Map());
@@ -836,13 +841,13 @@ export default function HomePage() {
         }
     };
 
-    const handleDeleteVideo = async (item: VideoMetadata) => {
-        console.log(`Deleting video: ${item.id}`);
+    const handleDeleteVideo = async (item: VideoMetadata, forceLocal = false) => {
+        console.log(`Deleting video: ${item.id}${forceLocal ? ' (force local only)' : ''}`);
         setError(null);
 
         try {
-            // Only delete from storage/OpenAI if video was actually created (not failed)
-            if (item.status !== 'failed') {
+            // Only delete from storage/OpenAI if video was actually created (not failed) and not force local
+            if (item.status !== 'failed' && !forceLocal) {
                 if (effectiveStorageModeClient === 'indexeddb') {
                     await db.videos.where('id').equals(item.id).delete();
                     setVideoSrcCache((prev) => {
@@ -864,12 +869,20 @@ export default function HomePage() {
 
                     if (!response.ok) {
                         const result = await response.json();
+
+                        // Handle "still processing" error with force delete option
+                        if (response.status === 400 && result.error?.includes('still being processed')) {
+                            setItemToForceDelete(item);
+                            setForceDeleteDialogOpen(true);
+                            return;
+                        }
+
                         throw new Error(result.error || 'Failed to delete video');
                     }
                     console.log('Deleted video from filesystem and OpenAI');
                 }
             } else {
-                console.log(`Skipping storage/OpenAI deletion for failed video ${item.id}`);
+                console.log(`Skipping storage/OpenAI deletion for ${item.status === 'failed' ? 'failed' : 'force local'} video ${item.id}`);
             }
 
             // Remove from history
@@ -881,6 +894,7 @@ export default function HomePage() {
                 setActiveJobs((prev) => {
                     const next = new Map(prev);
                     next.delete(item.id);
+                    saveActiveJobIds(next);
                     return next;
                 });
             }
@@ -888,6 +902,19 @@ export default function HomePage() {
             console.error('Error deleting video:', err);
             setError(err instanceof Error ? err.message : 'Failed to delete video');
         }
+    };
+
+    const handleForceDeleteConfirm = () => {
+        if (itemToForceDelete) {
+            handleDeleteVideo(itemToForceDelete, true);
+        }
+        setForceDeleteDialogOpen(false);
+        setItemToForceDelete(null);
+    };
+
+    const handleForceDeleteCancel = () => {
+        setForceDeleteDialogOpen(false);
+        setItemToForceDelete(null);
     };
 
     const handleSendToRemix = (videoId: string) => {
@@ -948,6 +975,42 @@ export default function HomePage() {
                         : 'Set a password to use for API requests.'
                 }
             />
+
+            <Dialog open={forceDeleteDialogOpen} onOpenChange={setForceDeleteDialogOpen}>
+                <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
+                    <DialogHeader>
+                        <DialogTitle className='flex items-center gap-2 text-white'>
+                            <AlertCircle className='h-5 w-5 text-yellow-500' />
+                            Video Still Processing
+                        </DialogTitle>
+                        <DialogDescription className='text-neutral-400'>
+                            This video is still processing on OpenAI servers and cannot be deleted remotely yet.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className='py-4 text-sm text-neutral-300'>
+                        <p>Would you like to force delete it from your local history?</p>
+                        <p className='mt-3 text-xs text-neutral-400'>
+                            ⚠️ This will remove it from your view, but it may still exist on OpenAI servers.
+                        </p>
+                    </div>
+                    <DialogFooter className='gap-2'>
+                        <Button
+                            type='button'
+                            variant='secondary'
+                            onClick={handleForceDeleteCancel}
+                            className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
+                            Wait
+                        </Button>
+                        <Button
+                            type='button'
+                            onClick={handleForceDeleteConfirm}
+                            className='bg-red-600 text-white hover:bg-red-700'>
+                            Force Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <div className='w-full max-w-7xl space-y-6'>
                 <div className='grid grid-cols-1 gap-6 lg:grid-cols-2'>
                     <div className='relative flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
